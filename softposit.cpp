@@ -124,8 +124,8 @@ namespace bloody{
       assignMat.row(nbImagePts) = scale * arma::ones<arma::rowvec>(nbWorldPts+1);
       std::cout<<"assign befor sinkhorn:"<<std::endl<<assignMat<<std::endl;
 
-      //assignMat = sinkhornImp (assignMat);    // My "improved" Sinkhorn.
-      assignMat = sinkhornSlack (assignMat);    // My "improved" Sinkhorn.
+      assignMat = sinkhornImp (assignMat);    // My "improved" Sinkhorn.
+      //assignMat = sinkhornSlack (assignMat);    // My "improved" Sinkhorn.
       std::cout<<"after sinkhorn Slack:"<<std::endl<<assignMat<<std::endl;
 
       auto numMatchPts = numMatches(assignMat);
@@ -326,6 +326,7 @@ namespace bloody{
     arma::umat posmax;
     arma::mat ratios;
     std::tie(posmax, ratios) = maxPosRatio(M);
+    std::cout<<"postmax, rations"<<posmax<<std::endl<<ratios<<std::endl;
 
     while(fabs(fMdiffSum) > fEpsilon2 && iNumSinkIter < iMaxIterSinkhorn)
     {
@@ -375,7 +376,6 @@ namespace bloody{
     auto nimgpnts  = nrows - 1;
     auto nmodpnts = ncols - 1;
 
-// Iterate over all columns of assignMat.
     for (auto k=0u; k<nmodpnts; ++k){
       arma::uword imax;
       auto vmax = assignMat.col(k).max(imax);
@@ -383,7 +383,6 @@ namespace bloody{
       if (imax == nrows-1) continue;                       // Slack value is maximum in this column.
 
 // Check if the max value in the column is maximum within its row.
-
       std::vector<arma::uword> other_cols;
       for (int i=0; i<assignMat.n_cols; ++i) if (i!=k) other_cols.push_back(i);
 
