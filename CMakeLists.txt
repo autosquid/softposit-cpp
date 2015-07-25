@@ -170,7 +170,7 @@ set (proj_include)
 # include(flycheck-clang)
 # write_dir_locals_el(${CMAKE_CURRENT_SOURCE_DIR})
 
-add_executable(sposit demo.cpp)
+add_executable(sposit demo.cpp softposit.cpp)
 target_link_libraries(sposit ${ALL_LIBS})
 
 
