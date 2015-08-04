@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /.clang_complete
 /GPATH
 /GRTAGS
@@ -9,3 +10,33 @@ build
 *.pdf
 *.tex
 *.fdb_latexmk
+=======
+>>>>>>> 9ee4789... Initial commit
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
