@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 
-#include "./softposit.hpp"
+#include "softposit/softposit.hpp"
 
 int main()
 {
