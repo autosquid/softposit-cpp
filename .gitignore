@@ -1,0 +1,11 @@
+/.clang_complete
+/GPATH
+/GRTAGS
+/GTAGS
+/README.md
+/build/CMakeCache.txt
+build
+*.fls
+*.pdf
+*.tex
+*.fdb_latexmk

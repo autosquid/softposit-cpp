@@ -57,6 +57,7 @@ int main()
 
   bloody::Param_type param{ 2.0E-4, 10.0};
   bloody::CamInfo_type caminfo{982.1f, bloody::point2di_type{376, 240}};
+
   bloody::Pose_type initpose;
 
   initpose.rot = arma::mat("0, 1, 0; -1, 0, 0; 0, 0, 1").t();

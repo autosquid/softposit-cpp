@@ -1,0 +1,6 @@
+#+ATTR_LATEX: :mode math :environment bmatrix :math-suffix \times
+| a | b |
+| c | d |
+#+ATTR_LATEX: :mode math :environment bmatrix
+| 1 | 2 |
+| 3 | 4 |
