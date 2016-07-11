@@ -47,7 +47,6 @@ namespace bloody{
     const Pose_type& initpose,
     boost::optional<const CamInfo_type&> maybe_caminfo);
 
-  void softposit(float* rot, float* trans, int* foundPose, int* _imagePts, float* _worldPts, int nbImagePts, int nbWorldPts, float beta0, float noiseStd, float* initRot, float* initTrans, float* focalLength, int* center);
 
 }
 
