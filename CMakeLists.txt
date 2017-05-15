@@ -9,7 +9,10 @@ ENDIF()
 
 # use libc++ for osx
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -std=c++1y")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+
+if (APPLE)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+endif
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR})
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR})
@@ -31,13 +34,15 @@ endif()
 
 
 # required thirdy party libraries
-INCLUDE_DIRECTORIES (/System/Library/Frameworks)
-find_library(Accelerate_LIBRARIES Accelerate)
-set(ALL_LIBS ${Accelerate_LIBRARIES})
+if (APPLE)
+  INCLUDE_DIRECTORIES (/System/Library/Frameworks)
+  find_library(Accelerate_LIBRARIES Accelerate)
+  set(ALL_LIBS ${Accelerate_LIBRARIES})
+endif()
 
 
 # find boost
-find_package(Boost REQUIRED COMPONENTS filesystem system unit_test_framework random date_time log_setup log regex thread program_options)
+find_package(Boost)
 link_directories(${Boost_LIBRARY_DIRS})
 
 # armadillo
@@ -50,7 +55,6 @@ include_directories(
   )
 
 add_definitions("-D_USE_MATH_DEFINES")
-
 
 set(ALL_LIBS ${ALL_LIBS} ${Boost_LIBRARIES} ${ARMADILLO_LIBRARIES})
 

@@ -97,11 +97,11 @@ namespace bloody{
     {
       std::cout<<boost::format("debug loop: %1%") % (debug_loop++)<<std::endl;
 
-      auto projectedU = homogeneousWorldPts * r1T;
-      auto projectedV = homogeneousWorldPts * r2T;
+      arma::mat projectedU = homogeneousWorldPts * r1T;
+      arma::mat projectedV = homogeneousWorldPts * r2T;
 
-      auto replicatedProjectedU = imageOnes * projectedU.t();
-      auto replicatedProjectedV = imageOnes * projectedV.t();
+      arma::mat replicatedProjectedU = imageOnes * projectedU.t();
+      arma::mat replicatedProjectedV = imageOnes * projectedV.t();
 
       std::cout<<"r1T, r2T used:"<<std::endl<<r1T<<std::endl<<r2T<<std::endl;
       std::cout<<"projected uv:"<<std::endl<<projectedU<<std::endl<<projectedV<<std::endl;
