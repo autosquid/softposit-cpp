@@ -53,9 +53,3 @@ make
 # Reference
 
 <a name="myfootnote1">[1]</a>: David, Philip and Dementhon, Daniel and Duraiswami, Ramani and Samet, Hanan, "{SoftPOSIT: Simultaneous pose and correspondence determination}", Int. J. Comput. Vis., 59:259--284 (2004)
-
-# Personal Requests
-
-1. Although it is not required, I'd very much appreciate it if users would send me a mail (instead of a postcard) telling me how they are making use of this program.
-
-2. You may modify this software, but all bug fixes must be sent to the author and open a pull request on Github.
