@@ -47,7 +47,6 @@ make
 # TODO
 
 1. could someone tell me how to do a serious (yet simple) logging ?  Boost Logging seems just too heavy for such a small lib.
-
 2. bindings for Python? is this needed?
 
 # Reference
