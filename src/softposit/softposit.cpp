@@ -4,14 +4,18 @@
 namespace bloody{
 
   using stat_info = arma::vec5;
-  std::tuple<arma::umat, arma::mat> maxPosRatio(arma::mat assignMat);
+  using stat_info_eigen = Eigen::Matrix<double, 5, 1>;
+//   std::tuple<arma::umat, arma::mat> maxPosRatio(arma::mat assignMat);
+  std::tuple<Eigen::Matrix<unsigned long long, Eigen::Dynamic, Eigen::Dynamic>, Eigen::MatrixXd> 
+            maxPosRatio(Eigen::MatrixXd assignMat);
   arma::mat sinkhornSlack(arma::mat M);
-  arma::mat sinkhornImp(arma::mat M);
+  arma::mat sinkhornSlack_eigen(arma::mat M);
+  Eigen::MatrixXd sinkhornImp(Eigen::MatrixXd M);
   int numMatches(arma::mat assignMat);
 
   boost::optional< std::tuple<Pose_type, match_type> > softposit(
-    const std::vector<point2di_type>& imagePts,
-    const std::vector<point3d_type>& worldPts,
+    const std::vector<point2di_type_eigen>& imagePts,
+    const std::vector<point3d_type_eigen>& worldPts,
     const Param_type& param,
     const Pose_type& initpose,
     boost::optional<const CamInfo_type&> maybe_caminfo)
@@ -21,12 +25,12 @@ namespace bloody{
 
     std::vector<stat_info> stats;
 
-    auto alpha = 9.21*pow(param.noiseStd,2) + 1;
-    auto maxDelta = sqrt(alpha)/2;          //  Max allowed error per world point.
+    auto alpha = 9.21 * std::pow(param.noiseStd, 2) + 1;
+    auto maxDelta = std::sqrt(alpha) / 2;          //  每个世界坐标所允许的最大误差
 
-    auto betaFinal = 0.5;                  // Terminate iteration when beta == betaFinal.
-    auto betaUpdate = 1.05;                // Update rate on beta.
-    auto epsilon0 = 0.01;                  // Used to initialize assignement matrix.
+    auto betaFinal = 0.5;                  // 最终迭代目标
+    auto betaUpdate = 1.05;                // 迭代率
+    auto epsilon0 = 0.01;                  // 用于初始化任务矩阵
 
     auto maxCount = 1;
     auto minBetaCount = 20;
@@ -34,53 +38,55 @@ namespace bloody{
     auto nbWorldPts = worldPts.size();
 
     auto minNbPts = std::min(nbImagePts, nbWorldPts);
-    auto maxNbPts = nbImagePts+nbWorldPts - minNbPts;
+    auto maxNbPts = nbImagePts + nbWorldPts - minNbPts;
 
-    auto scale = 1.0/(maxNbPts + 1);
+    auto scale = 1.0 / (maxNbPts + 1);
 
-    std::vector<point2d_type> _centeredImage(imagePts.size());
+    std::vector<point2d_type_eigen> _centeredImage(imagePts.size());
 
     CamInfo_type caminfo;
     if (maybe_caminfo)
       caminfo = *maybe_caminfo;
     else{
       caminfo.focalLength = 1;
-      caminfo.center = point2di_type{0, 0};
+      caminfo.center = point2di_type_eigen{0, 0};
     }
 
     std::cout<<"init: "<<std::endl<<initpose.rot<<std::endl<<initpose.trans<<std::endl;
 
     std::transform(imagePts.begin(), imagePts.end(),
                    _centeredImage.begin(),
-                   [&caminfo](const point2di_type & _pt){
-                     return point2d_type((point2d_type{double(_pt[0]), double(_pt[1])} - caminfo.center)/caminfo.focalLength);
+                   [&caminfo](const point2di_type_eigen & _pt)
+                   {
+                     return point2d_type_eigen(
+                         (point2d_type_eigen{
+                             double(_pt[0]) / caminfo.focalLength, 
+                             double(_pt[1]) / caminfo.focalLength} - (Eigen::Vector2d)caminfo.center / caminfo.focalLength) 
+                         );
                    });
+    Eigen::Matrix<double, Eigen::Dynamic, 2> centeredImage;
 
-    arma::mat centeredImage = arma::zeros<arma::mat>(_centeredImage.size(),2);
-
-    for (int j=0; j<centeredImage.n_cols; ++j)
+    for (size_t i = 0; i < _centeredImage.size(); ++i)
     {
-      for (int i=0; i<centeredImage.n_rows; ++i){
-        centeredImage(i,j) = _centeredImage[i][j];
-      }
+        centeredImage.block<1, 2>(i, 0) << _centeredImage[i].x(), _centeredImage[i].y();
     }
 
-    std::cout<<"centered image :"<<centeredImage<<std::endl;
-
-    arma::mat homogeneousWorldPts = arma::zeros<arma::mat>(worldPts.size(), 4).eval();
-    for (int i=0; i<worldPts.size(); ++i)
+    // std::cout<<"centered image :"<<centeredImage<<std::endl;
+    
+    // 齐次坐标
+    Eigen::Matrix<double, Eigen::Dynamic, 4> homogeneousWorldPts;
+    for (int i = 0; i < worldPts.size(); ++i)
     {
-      homogeneousWorldPts.row(i) = arma::rowvec{worldPts[i][0], worldPts[i][1], worldPts[i][2],1};
+      homogeneousWorldPts.block<1, 4>(i, 0) << worldPts[i][0], worldPts[i][1], worldPts[i][2],1;
     }
-    std::cout<<"begin to make world point homogeneous:" << homogeneousWorldPts <<std::endl;
+    // std::cout<<"begin to make world point homogeneous:" << homogeneousWorldPts <<std::endl;
 
     auto pose = initpose;
+    Eigen::VectorXd wk = homogeneousWorldPts * Eigen::Vector4d{pose.rot(2,0)/pose.trans[2], pose.rot(2,1)/pose.trans[2], pose.rot(2,2)/pose.trans[2],1};
+    // std::cout <<"wk"<<wk<<std::endl;
 
-    arma::mat wk = homogeneousWorldPts * arma::vec4 {pose.rot(2,0)/pose.trans[2], pose.rot(2,1)/pose.trans[2], pose.rot(2,2)/pose.trans[2],1};
-    std::cout <<"wk"<<wk<<std::endl;
-
-    arma::vec4 r1T = {pose.rot(0,0)/pose.trans(2), pose.rot(0,1)/pose.trans(2), pose.rot(0,2)/pose.trans(2), pose.trans(0)/pose.trans(2)};
-    arma::vec4 r2T = {pose.rot(1,0)/pose.trans(2), pose.rot(1,1)/pose.trans(2), pose.rot(1,2)/pose.trans(2), pose.trans(1)/pose.trans(2)};
+    Eigen::Vector4d r1T = {pose.rot(0,0)/pose.trans(2), pose.rot(0,1)/pose.trans(2), pose.rot(0,2)/pose.trans(2), pose.trans(0)/pose.trans(2)};
+    Eigen::Vector4d r2T = {pose.rot(1,0)/pose.trans(2), pose.rot(1,1)/pose.trans(2), pose.rot(1,2)/pose.trans(2), pose.trans(1)/pose.trans(2)};
 
     auto  betaCount = 0;
     auto poseConverged = 0;
@@ -88,40 +94,43 @@ namespace bloody{
     auto foundPose = 0;
     auto beta = param.beta0;
 
-    arma::mat assignMat = arma::ones(nbImagePts+1,nbWorldPts+1) + epsilon0;
+    Eigen::MatrixXd assignMat = Eigen::MatrixXd::Ones(nbImagePts+1, nbWorldPts+1) * (1 + epsilon0);
 
-    auto imageOnes = arma::ones<arma::mat>(nbImagePts, 1);
+    Eigen::VectorXd imageOnes = Eigen::MatrixXd::Ones(nbImagePts, 1);
 
     int debug_loop = 0;
     while (beta < betaFinal && !assignConverged)
     {
       std::cout<<boost::format("debug loop: %1%") % (debug_loop++)<<std::endl;
 
-      arma::mat projectedU = homogeneousWorldPts * r1T;
-      arma::mat projectedV = homogeneousWorldPts * r2T;
+      Eigen::VectorXd projectedU = homogeneousWorldPts * r1T;
+      Eigen::VectorXd projectedV = homogeneousWorldPts * r2T;
 
-      arma::mat replicatedProjectedU = imageOnes * projectedU.t();
-      arma::mat replicatedProjectedV = imageOnes * projectedV.t();
+      Eigen::MatrixXd replicatedProjectedU = imageOnes * projectedU.transpose();
+      Eigen::MatrixXd replicatedProjectedV = imageOnes * projectedV.transpose();
 
       std::cout<<"r1T, r2T used:"<<std::endl<<r1T<<std::endl<<r2T<<std::endl;
       std::cout<<"projected uv:"<<std::endl<<projectedU<<std::endl<<projectedV<<std::endl;
       std::cout<<"reprojected uv"<<std::endl;
-      std::cout<<arma::mat(replicatedProjectedU)<<std::endl<<arma::mat(replicatedProjectedV)<<std::endl;
+      std::cout<<Eigen::MatrixXd(replicatedProjectedU)<<std::endl<<Eigen::MatrixXd(replicatedProjectedV)<<std::endl;
 
       std::cout<<"SOP"<<std::endl;
-      auto wkxj = centeredImage.col(0) * wk.t();
-      auto wkyj = centeredImage.col(1) * wk.t();
+      auto wkxj = centeredImage.col(0) * wk.transpose();
+      auto wkyj = centeredImage.col(1) * wk.transpose();
 
       std::cout<<"wkxj, wkyj"<<std::endl;
       std::cout<<wkxj<<std::endl<<wkyj<<std::endl;
-
-      arma::mat distMat = caminfo.focalLength*caminfo.focalLength*(arma::square(replicatedProjectedU - wkxj) + arma::square (replicatedProjectedV - wkyj));
+      
+      Eigen::MatrixXd distMat = caminfo.focalLength * caminfo.focalLength *
+                                (replicatedProjectedU - wkxj).array().square() + 
+                                (replicatedProjectedV - wkyj).array().square();
 
       std::cout<<"dist mat:"<<std::endl<<distMat<<std::endl;
-
-      assignMat(arma::span(0, nbImagePts-1), arma::span(0, nbWorldPts-1)) = scale*arma::exp(-beta*(distMat - alpha));
-      assignMat.col(nbWorldPts) = scale * arma::ones<arma::vec>(nbImagePts+1);
-      assignMat.row(nbImagePts) = scale * arma::ones<arma::rowvec>(nbWorldPts+1);
+      
+      assignMat.block(0, 0, nbImagePts-1, nbWorldPts-1) = scale * (-beta*(distMat - alpha * Eigen::MatrixXd::Ones(distMat.rows(), distMat.cols()))).array().exp();
+    //   assignMat(arma::span(0, nbImagePts-1), arma::span(0, nbWorldPts-1)) = scale*arma::exp(-beta*(distMat - alpha));
+      assignMat.col(nbWorldPts) = scale * Eigen::VectorXd::Ones(nbImagePts+1);
+      assignMat.row(nbImagePts) = scale * Eigen::VectorXd::Ones(nbWorldPts+1).transpose();
       std::cout<<"assign befor sinkhorn:"<<std::endl<<assignMat<<std::endl;
 
       assignMat = sinkhornImp (assignMat);    // My "improved" Sinkhorn.
@@ -310,19 +319,20 @@ namespace bloody{
   }
 
 
-  arma::mat sinkhornImp(arma::mat M){
-    arma::mat normalizedMat;
+  Eigen::MatrixXd sinkhornImp(Eigen::MatrixXd M){
+    Eigen::MatrixXd normalizedMat;
 
-    auto iMaxIterSinkhorn=60;          // In PAMI paper
-    auto fEpsilon2 = 0.001;            // Used in termination of Sinkhorn Loop.
+    auto iMaxIterSinkhorn = 60;          // In PAMI paper
+    auto fEpsilon2 = 0.001;              // Used in termination of Sinkhorn Loop.
 
     auto iNumSinkIter = 0;
-    auto nbRows = M.n_rows;
-    auto nbCols = M.n_cols;
+    auto nbRows = M.rows();
+    auto nbCols = M.cols();
 
     auto fMdiffSum = fEpsilon2 + 1;    // Set "difference" from last M matrix above the loop termination threshold
 
 // Get the positions and ratios to slack of the nonslack elements that are maximal in their row and column.
+    // Eigen::Matrix<unsigned long long, 3, 3>
     arma::umat posmax;
     arma::mat ratios;
     std::tie(posmax, ratios) = maxPosRatio(M);
@@ -365,26 +375,28 @@ namespace bloody{
   }
 
 
-  std::tuple<arma::umat, arma::mat> maxPosRatio(arma::mat assignMat)
+  std::tuple<Eigen::Matrix<unsigned long long, Eigen::Dynamic, Eigen::Dynamic>, Eigen::MatrixXd> 
+            maxPosRatio(Eigen::MatrixXd assignMat)
   {
 //    function [pos, ratios] = maxPosRatio(assignMat)
-    arma::umat pos;
-    arma::mat ratios;
+    Eigen::Matrix<unsigned long long, Eigen::Dynamic, Eigen::Dynamic> pos;
+    Eigen::MatrixXd ratios;
 
-    auto nrows =  assignMat.n_rows; //size(assignMat,1);
-    auto ncols = assignMat.n_cols; //size(assignMat,2);
+    auto nrows =  assignMat.rows(); //size(assignMat,1);
+    auto ncols = assignMat.cols(); //size(assignMat,2);
     auto nimgpnts  = nrows - 1;
     auto nmodpnts = ncols - 1;
-
+    arma::mat test;
+    // 按列遍历
     for (auto k=0u; k<nmodpnts; ++k){
-      arma::uword imax;
-      auto vmax = assignMat.col(k).max(imax);
+      unsigned long long imax, __t;
+      auto vmax = assignMat.col(k).maxCoeff(&__t, &imax);
 
       if (imax == nrows-1) continue;                       // Slack value is maximum in this column.
 
 // Check if the max value in the column is maximum within its row.
-      std::vector<arma::uword> other_cols;
-      for (int i=0; i<assignMat.n_cols; ++i) if (i!=k) other_cols.push_back(i);
+      std::vector<unsigned long long> other_cols;
+      for (int i=0; i<assignMat.cols(); ++i) if (i!=k) other_cols.push_back(i);
 
       if (arma::all(arma::all(vmax > assignMat.submat(arma::uvec{imax},arma::uvec(other_cols))))){
         pos = arma::join_cols(pos, arma::umat(arma::urowvec{imax, k}));
