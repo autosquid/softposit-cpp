@@ -2,14 +2,21 @@ cmake_minimum_required(VERSION 3.0)
 
 project(SoftPosit)
 
+set(CMAKE_BUILD_TYPE "DEBUG")
+if (CMAKE_BUILD_TYPE STREQUAL "RELEASE")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}-std=c++14 -O3 -pthread -fopenmp -s")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -pthread -fopenmp -s")
+else(CMAKE_BUILD_TYPE STREQUAL "RELEASE")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}-std=c++14 -O0 -g -Wall -pthread")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g -Wall -pthread")
+endif(CMAKE_BUILD_TYPE STREQUAL "RELEASE")
+
 IF(CMAKE_VERSION VERSION_EQUAL "3.0.0" OR CMAKE_VERSION VERSION_GREATER "3.0.0")
   CMAKE_POLICY(SET CMP0045 OLD)  # suppress set_target_properties empty target warnning
   CMAKE_POLICY(SET CMP0026 OLD)  # suppress set_target_properties read LOCATION warnning
 ENDIF()
 
 # use libc++ for osx
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -std=c++1y")
-
 if (APPLE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
 endif()

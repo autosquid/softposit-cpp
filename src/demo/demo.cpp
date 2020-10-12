@@ -60,8 +60,7 @@ int main()
 
   bloody::Pose_type initpose;
 
-  initpose.rot.block<3, 3>(0, 0) << 0, 1, 0, -1, 0, 0, 0, 0, 1;
-  initpose.rot = initpose.rot.transpose();
+  initpose.rot << 0, -1, 0, 1, 0, 0, 0, 0, 1;
   initpose.trans = bloody::point3d_type_eigen{0, 0, 30};
 
   auto maybe_pose = softposit(

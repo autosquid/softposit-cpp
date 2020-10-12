@@ -11,7 +11,7 @@ namespace bloody{
   arma::mat sinkhornSlack(arma::mat M);
   arma::mat sinkhornSlack_eigen(arma::mat M);
   Eigen::MatrixXd sinkhornImp(Eigen::MatrixXd M);
-  int numMatches(arma::mat assignMat);
+  int numMatches(Eigen::MatrixXd assignMat);
 
   boost::optional< std::tuple<Pose_type, match_type> > softposit(
     const std::vector<point2di_type_eigen>& imagePts,
@@ -53,37 +53,30 @@ namespace bloody{
     }
 
     std::cout<<"init: "<<std::endl<<initpose.rot<<std::endl<<initpose.trans<<std::endl;
-
-    std::transform(imagePts.begin(), imagePts.end(),
-                   _centeredImage.begin(),
-                   [&caminfo](const point2di_type_eigen & _pt)
-                   {
-                     return point2d_type_eigen(
-                         (point2d_type_eigen{
-                             double(_pt[0]) / caminfo.focalLength, 
-                             double(_pt[1]) / caminfo.focalLength} - (Eigen::Vector2d)caminfo.center / caminfo.focalLength) 
-                         );
-                   });
     Eigen::Matrix<double, Eigen::Dynamic, 2> centeredImage;
+    centeredImage.resize(imagePts.size(), Eigen::NoChange);
 
-    for (size_t i = 0; i < _centeredImage.size(); ++i)
+    for (size_t i = 0; i < imagePts.size(); ++i)
     {
-        centeredImage.block<1, 2>(i, 0) << _centeredImage[i].x(), _centeredImage[i].y();
+        centeredImage.block<1, 2>(i, 0) << (imagePts[i].x() - (double)caminfo.center.x()) / caminfo.focalLength,
+                                           (imagePts[i].y() - (double)caminfo.center.y()) / caminfo.focalLength;
     }
 
-    // std::cout<<"centered image :"<<centeredImage<<std::endl;
+    std::cout<<"centered image :"<<centeredImage<<std::endl;
     
     // 齐次坐标
     Eigen::Matrix<double, Eigen::Dynamic, 4> homogeneousWorldPts;
+    homogeneousWorldPts.resize(worldPts.size(), Eigen::NoChange);
+
     for (int i = 0; i < worldPts.size(); ++i)
     {
       homogeneousWorldPts.block<1, 4>(i, 0) << worldPts[i][0], worldPts[i][1], worldPts[i][2],1;
     }
-    // std::cout<<"begin to make world point homogeneous:" << homogeneousWorldPts <<std::endl;
+    std::cout<<"begin to make world point homogeneous:" << homogeneousWorldPts <<std::endl;
 
     auto pose = initpose;
     Eigen::VectorXd wk = homogeneousWorldPts * Eigen::Vector4d{pose.rot(2,0)/pose.trans[2], pose.rot(2,1)/pose.trans[2], pose.rot(2,2)/pose.trans[2],1};
-    // std::cout <<"wk"<<wk<<std::endl;
+    std::cout <<"wk"<<wk<<std::endl;
 
     Eigen::Vector4d r1T = {pose.rot(0,0)/pose.trans(2), pose.rot(0,1)/pose.trans(2), pose.rot(0,2)/pose.trans(2), pose.trans(0)/pose.trans(2)};
     Eigen::Vector4d r2T = {pose.rot(1,0)/pose.trans(2), pose.rot(1,1)/pose.trans(2), pose.rot(1,2)/pose.trans(2), pose.trans(1)/pose.trans(2)};
@@ -122,12 +115,12 @@ namespace bloody{
       std::cout<<wkxj<<std::endl<<wkyj<<std::endl;
       
       Eigen::MatrixXd distMat = caminfo.focalLength * caminfo.focalLength *
-                                (replicatedProjectedU - wkxj).array().square() + 
-                                (replicatedProjectedV - wkyj).array().square();
+                                ((replicatedProjectedU - wkxj).array().square() + 
+                                (replicatedProjectedV - wkyj).array().square());
 
       std::cout<<"dist mat:"<<std::endl<<distMat<<std::endl;
       
-      assignMat.block(0, 0, nbImagePts-1, nbWorldPts-1) = scale * (-beta*(distMat - alpha * Eigen::MatrixXd::Ones(distMat.rows(), distMat.cols()))).array().exp();
+      assignMat.block(0, 0, nbImagePts, nbWorldPts) = scale * (-beta*(distMat - alpha * Eigen::MatrixXd::Ones(distMat.rows(), distMat.cols()))).array().exp();
     //   assignMat(arma::span(0, nbImagePts-1), arma::span(0, nbWorldPts-1)) = scale*arma::exp(-beta*(distMat - alpha));
       assignMat.col(nbWorldPts) = scale * Eigen::VectorXd::Ones(nbImagePts+1);
       assignMat.row(nbImagePts) = scale * Eigen::VectorXd::Ones(nbWorldPts+1).transpose();
@@ -140,46 +133,47 @@ namespace bloody{
       auto numMatchPts = numMatches(assignMat);
       std::cout<<"num matches: "<<numMatchPts<<std::endl;
 
-      auto sumNonslack = arma::accu(assignMat.submat(0,0,nbImagePts-1,nbWorldPts-1));
+      auto sumNonslack = assignMat.block(0,0,nbImagePts,nbWorldPts).sum();
       std::cout<<"sum non slack: "<<sumNonslack<<std::endl;
 
-      arma::mat summedByColAssign = arma::sum(assignMat.submat(0, 0, nbImagePts-1, nbWorldPts-1));
-      arma::mat sumSkSkT = arma::zeros<arma::mat>(4, 4);
+      Eigen::VectorXd summedByColAssign = assignMat.block(0, 0, nbImagePts, nbWorldPts).colwise().sum();
+      Eigen::Matrix4d sumSkSkT = Eigen::Matrix4d::Zero(4, 4);
 
       for(auto  k = 0; k<nbWorldPts; ++k){
-        sumSkSkT = sumSkSkT + summedByColAssign(k) * homogeneousWorldPts.row(k).t() * homogeneousWorldPts.row(k);
+        sumSkSkT = sumSkSkT + summedByColAssign(k) * homogeneousWorldPts.row(k).transpose() * homogeneousWorldPts.row(k);
       }
 
       std::cout<<"check ill-condition"<<std::endl;
-
-      if (arma::cond(sumSkSkT) > 1e10){
+      Eigen::JacobiSVD<Eigen::Matrix4d> svd_sumSKSkT(sumSkSkT);
+      double cond = svd_sumSKSkT.singularValues()(0) / svd_sumSKSkT.singularValues()(svd_sumSKSkT.singularValues().size()-1);
+      if (cond > 1e10){
         std::cout<<"sumSkSkT is ill-conditioned, termininating search."<<std::endl;
         return boost::none;
       }
 
-      arma::mat objectMat = arma::inv(sumSkSkT);                           // Inv(L), a 4x4 matrix.
+      Eigen::Matrix4d objectMat = sumSkSkT.inverse();                           // Inv(L), a 4x4 matrix.
       poseConverged = 0;                              // Initialize for POSIT loop.
       auto pose_iter_count = 0;
 
       // Save the previouse pose vectors for convergence checks.
-      arma::vec4 r1Tprev = r1T;
-      arma::vec4 r2Tprev = r2T;
+      Eigen::Vector4d r1Tprev = r1T;
+      Eigen::Vector4d r2Tprev = r2T;
 
       double Tx, Ty, Tz;
-      arma::vec r1, r2, r3;
+      Eigen::Vector3d r1, r2, r3;
       double delta;
 
     std:cout<<"begin converge loop"<<std::endl;
       while (poseConverged == false & pose_iter_count < maxCount)
       {
 
-        arma::vec weightedUi(4, arma::fill::zeros) ;
-        arma::vec weightedVi(4, arma::fill::zeros) ;
+        Eigen::Vector4d weightedUi = Eigen::Vector4d::Zero(4);
+        Eigen::Vector4d weightedVi = Eigen::Vector4d::Zero(4);
 
         for (int j=0;j<nbImagePts; ++j){
           for (int k=0; k<nbWorldPts; ++k){
-            weightedUi = weightedUi + assignMat(j,k) * wk(k) * centeredImage(j,0) * homogeneousWorldPts.row(k).t();
-            weightedVi = weightedVi + assignMat(j,k) * wk(k) * centeredImage(j,1) * homogeneousWorldPts.row(k).t();
+            weightedUi = weightedUi + assignMat(j,k) * wk(k) * centeredImage(j,0) * homogeneousWorldPts.row(k).transpose();
+            weightedVi = weightedVi + assignMat(j,k) * wk(k) * centeredImage(j,1) * homogeneousWorldPts.row(k).transpose();
           }
         }
 
@@ -187,36 +181,40 @@ namespace bloody{
         r2T = objectMat * weightedVi;
 
         arma::mat U, V;
-        arma::vec s;
-        arma::mat X(3,2);
+        Eigen::Vector2d s;
+        Eigen::Matrix<double, 3, 2> X;
 
-        X.col(0) = r1T(arma::span(0,2));
-        X.col(1) = r2T(arma::span(0,2));
+        X.col(0) = r1T.head(3);
+        X.col(1) = r2T.head(3);
 
         std::cout<<"svd"<<std::endl;
-        arma::svd(U,s,V, X);
-
-        arma::mat A = U * arma::mat("1 0; 0 1; 0 0") * V.t();
+        Eigen::JacobiSVD<Eigen::Matrix<double, 3, 2>> svd(X, Eigen::ComputeFullU | Eigen::ComputeFullV);
+        
+        // arma::svd(U,s,V, X);
+        Eigen::Matrix<double, 3, 2> II;
+        II << 1, 0, 0, 1, 0, 0 ;
+        s = svd.singularValues();
+        Eigen::MatrixXd A = svd.matrixU() * II * svd.matrixV().transpose();
 
         r1 = A.col(0);
         r2 = A.col(1);
-        r3 = arma::cross(r1,r2);
+        r3  = r1.cross(r2);
 
         Tz = 2 / (s(0) + s(1));
         Tx = r1T(3) * Tz;
         Ty = r2T(3) * Tz;
-        auto r3T= arma::vec{r3[0], r3[1], r3[2], Tz};
+        auto r3T= Eigen::Vector4d{r3[0], r3[1], r3[2], Tz};
 
         std::cout<<"svd"<<std::endl<<A<<r1<<r2<<r3<<Tx<<Ty<<Tz<<std::endl;
 
-        r1T = arma::vec{r1[0], r1[1], r1[2], Tx}/Tz;
-        r2T = arma::vec{r2[0], r2[1], r2[2], Ty}/Tz;
+        r1T = Eigen::Vector4d{r1[0], r1[1], r1[2], Tx}/Tz;
+        r2T = Eigen::Vector4d{r2[0], r2[1], r2[2], Ty}/Tz;
         std::cout<<"r1T, r2T update: "<<r1T<< std::endl<<r2T<<std::endl;
 
         wk = homogeneousWorldPts * r3T /Tz;
 
         std::cout<<"delta"<<std::endl;
-        delta = sqrt(arma::accu(assignMat.submat(0, 0, nbImagePts-1, nbWorldPts-1) % distMat)/nbWorldPts);
+        delta = std::sqrt((assignMat.block(0, 0, nbImagePts, nbWorldPts).cwiseProduct(distMat) / (double)nbWorldPts).sum());
         poseConverged = delta < maxDelta;
 
         std::cout<<"pose converged:"<<poseConverged<<std::endl;
@@ -226,7 +224,7 @@ namespace bloody{
         auto trace = std::vector<double>{
           beta ,delta ,double(numMatchPts)/nbWorldPts ,
           double(sumNonslack)/nbWorldPts,
-          arma::accu(arma::square(r1T-r1Tprev)) + arma::accu(arma::square(r2T-r2Tprev))
+          ((r1T-r1Tprev).array().square() + (r2T-r2Tprev).array().square()).sum()
         };
 
         std::cout<<"keep log"<<std::endl;
@@ -239,10 +237,10 @@ namespace bloody{
       betaCount = betaCount + 1;
       assignConverged = poseConverged && betaCount > minBetaCount;
 
-      pose.trans = arma::vec{Tx, Ty, Tz};
-      pose.rot.row(0) = r1.t();
-      pose.rot.row(1) = r2.t();
-      pose.rot.row(2) = r3.t();
+      pose.trans = Eigen::Vector3d{Tx, Ty, Tz};
+      pose.rot.row(0) = r1.transpose();
+      pose.rot.row(1) = r2.transpose();
+      pose.rot.row(2) = r3.transpose();
 
       foundPose = (delta < maxDelta && betaCount > minBetaCount);
 
@@ -294,26 +292,30 @@ namespace bloody{
   }
 
 
-  int numMatches(arma::mat assignMat)
+  int numMatches(Eigen::MatrixXd assignMat)
   {
     int num = 0;
 
-    auto nimgpnts  = assignMat.n_rows - 1;
-    auto nmodpnts = assignMat.n_cols - 1;
+    auto nimgpnts  = assignMat.rows() - 1;
+    auto nmodpnts = assignMat.cols() - 1;
 
     for (int k = 0; k< nmodpnts; ++k){
 
-      arma::uword imax;
-      auto vmax = assignMat.col(k).max(imax);
+      unsigned long long imax;
+      auto vmax = assignMat.col(k).maxCoeff(&imax);
 
-      if(imax == assignMat.n_rows - 1) continue; // Slack value is maximum in this column.
+      if(imax == assignMat.rows() - 1) continue; // Slack value is maximum in this column.
 
-      std::vector<arma::uword> other_cols;
-      other_cols.reserve(assignMat.n_cols-1);
-      for (int i=0; i<assignMat.n_cols; ++i)
+      std::vector<unsigned long long> other_cols;
+      other_cols.reserve(assignMat.cols()-1);
+      for (int i=0; i<assignMat.cols(); ++i)
         if (i!=k) other_cols.push_back(i);
-      if (arma::all(arma::all(vmax > assignMat.submat(arma::uvec{imax},arma::uvec(other_cols)))))
+      unsigned long long kmax;
+      assignMat.row(imax).maxCoeff(&kmax);
+      if (kmax == k){
         num = num + 1;              // This value is maximal in its row & column.
+      }
+        
     }
     return num;
   }
@@ -333,8 +335,8 @@ namespace bloody{
 
 // Get the positions and ratios to slack of the nonslack elements that are maximal in their row and column.
     // Eigen::Matrix<unsigned long long, 3, 3>
-    arma::umat posmax;
-    arma::mat ratios;
+    Eigen::Matrix<unsigned long long, Eigen::Dynamic, Eigen::Dynamic> posmax;
+    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> ratios;
     std::tie(posmax, ratios) = maxPosRatio(M);
     std::cout<<"postmax, rations"<<posmax<<std::endl<<ratios<<std::endl;
 
@@ -344,29 +346,29 @@ namespace bloody{
 
       // Col normalization (except outlier row - do not normalize col slacks
       // against each other)
-      arma::rowvec McolSums = arma::sum(M, 0);  // Row vector.
+      Eigen::VectorXd McolSums = M.colwise().sum(); // Row vector. 按列求和
       McolSums(nbCols-1) = 1;  // Don't normalize slack col terms against each other.
-
-      auto McolSumsRep = arma::ones<arma::vec>(nbRows) * McolSums ;
-      M = M / McolSumsRep;
+      
+      Eigen::MatrixXd McolSumsRep = Eigen::VectorXd::Ones(nbRows) * McolSums.transpose();
+      M = M.cwiseQuotient(McolSumsRep);
 
       // Fix values in the slack column.
-      for (auto i=0; i< posmax.n_rows; ++i){
+      for (auto i=0; i< posmax.rows(); ++i){
         M(posmax(i,0), nbCols-1) = ratios(i,0)*M(posmax(i,0),posmax(i,1));
       }
       // Row normalization (except outlier row - do not normalize col slacks against each other)
-      arma::vec MrowSums = arma::sum(M, 1);  // Column vector.
+      Eigen::VectorXd MrowSums = M.rowwise().sum();  // Column vector.
       MrowSums(nbRows-1) = 1;  // Don't normalize slack row terms against each other.
 
-      auto MrowSumsRep = MrowSums * arma::ones<arma::rowvec>(nbCols);
-      M = M / MrowSumsRep;
+      auto MrowSumsRep = MrowSums * Eigen::VectorXd::Ones(nbCols).transpose();
+      M = M.cwiseQuotient(MrowSumsRep);
 
       // Fix values in the slack row.
-      for (auto i=0; i< posmax.n_rows; ++i){
+      for (auto i=0; i< posmax.rows(); ++i){
         M(nbRows-1,posmax(i,1)) = ratios(i,1)*M(posmax(i,0),posmax(i,1));
       }
       iNumSinkIter=iNumSinkIter+1;
-      fMdiffSum=arma::accu(arma::abs(M-Mprev));
+      fMdiffSum=(M-Mprev).cwiseAbs().sum();
 
     }
     normalizedMat = M;
@@ -379,8 +381,10 @@ namespace bloody{
             maxPosRatio(Eigen::MatrixXd assignMat)
   {
 //    function [pos, ratios] = maxPosRatio(assignMat)
-    Eigen::Matrix<unsigned long long, Eigen::Dynamic, Eigen::Dynamic> pos;
-    Eigen::MatrixXd ratios;
+    Eigen::Matrix<unsigned long long, 1, Eigen::Dynamic> pos;
+    Eigen::Matrix<double, 1, Eigen::Dynamic> ratios;
+    std::vector<unsigned long long> pos_;
+    std::vector<double> ratios_;
 
     auto nrows =  assignMat.rows(); //size(assignMat,1);
     auto ncols = assignMat.cols(); //size(assignMat,2);
@@ -390,54 +394,58 @@ namespace bloody{
     // 按列遍历
     for (auto k=0u; k<nmodpnts; ++k){
       unsigned long long imax, __t;
-      auto vmax = assignMat.col(k).maxCoeff(&__t, &imax);
+      auto vmax = assignMat.col(k).maxCoeff(&imax);
 
       if (imax == nrows-1) continue;                       // Slack value is maximum in this column.
 
-// Check if the max value in the column is maximum within its row.
-      std::vector<unsigned long long> other_cols;
-      for (int i=0; i<assignMat.cols(); ++i) if (i!=k) other_cols.push_back(i);
-
-      if (arma::all(arma::all(vmax > assignMat.submat(arma::uvec{imax},arma::uvec(other_cols))))){
-        pos = arma::join_cols(pos, arma::umat(arma::urowvec{imax, k}));
-
+// 检查列中的最大值在其行中是否为最大值.
+      // 在其行中是最大值
+      unsigned long long kmax;
+      auto _t = assignMat.row(imax).maxCoeff(&kmax);
+      if (kmax == k)
+      {
+        pos_.push_back(imax);
+        pos_.push_back(k);
         // Compute the ratios to row and column slack values.
         auto rr = assignMat(imax,ncols-1)/assignMat(imax,k);
         auto cr = assignMat(nrows-1,k)/assignMat(imax,k);
-        ratios = arma::join_cols(ratios, arma::mat(arma::rowvec{rr, cr}));
+        ratios_.push_back(rr);
+        ratios_.push_back(cr);
       }
-    }
 
+    }
+    pos = Eigen::Map<Eigen::Matrix<unsigned long long, 1, Eigen::Dynamic>, Eigen::Unaligned>(pos_.data(), pos_.size());
+    ratios = Eigen::Map<Eigen::Matrix<double, 1, Eigen::Dynamic>, Eigen::Unaligned>(ratios_.data(), ratios_.size());
     return std::make_tuple(pos, ratios);
   }
 
-  void softposit(float* rot, float* trans, int* foundPose, int* _imagePts, float* _worldPts, int nbImagePts, int nbWorldPts, float beta0, float noiseStd, float* initRot, float* initTrans, float* focalLength, int* center)
-  {
+  // void softposit(float* rot, float* trans, int* foundPose, int* _imagePts, float* _worldPts, int nbImagePts, int nbWorldPts, float beta0, float noiseStd, float* initRot, float* initTrans, float* focalLength, int* center)
+  // {
 
-    std::vector<point2di_type> imagePts;
-    std::vector<point3d_type> worldPts;
+  //   std::vector<point2di_type> imagePts;
+  //   std::vector<point3d_type> worldPts;
 
-    for (uint i=0u; i<nbImagePts; ++i){
-      imagePts.push_back(point2di_type{_imagePts[i*2], _imagePts[i*2+1]});
-    }
-    for (uint i=0u; i<nbWorldPts; ++i){
-      worldPts.push_back(point3d_type{_worldPts[i*3], _worldPts[3*i+1], _worldPts[3*i+2]});
-    }
+  //   for (uint i=0u; i<nbImagePts; ++i){
+  //     imagePts.push_back(point2di_type{_imagePts[i*2], _imagePts[i*2+1]});
+  //   }
+  //   for (uint i=0u; i<nbWorldPts; ++i){
+  //     worldPts.push_back(point3d_type{_worldPts[i*3], _worldPts[3*i+1], _worldPts[3*i+2]});
+  //   }
 
-    Pose_type initpose;
-    for (int i=0,k=0; i<3; ++i){
-      for (int j=0; j<3; ++j){
-        initpose.rot(i,j) = initRot[k++];
-      }
-    }
-    initpose.trans = point3d_type{initTrans[0], initTrans[1], initTrans[2]};
+  //   Pose_type initpose;
+  //   for (int i=0,k=0; i<3; ++i){
+  //     for (int j=0; j<3; ++j){
+  //       initpose.rot(i,j) = initRot[k++];
+  //     }
+  //   }
+  //   initpose.trans = point3d_type{initTrans[0], initTrans[1], initTrans[2]};
 
-    Param_type param{beta0, noiseStd};
-    if (focalLength){
-      CamInfo_type caminfo{*focalLength, point2di_type{*center, *(center+1)}};
-      auto maybe_result = softposit(imagePts, worldPts, param, initpose, caminfo);
-    }else{
-      auto maybe_result = softposit(imagePts, worldPts, param, initpose, boost::none);
-    }
-  }
+  //   Param_type param{beta0, noiseStd};
+  //   if (focalLength){
+  //     CamInfo_type caminfo{*focalLength, point2di_type{*center, *(center+1)}};
+  //     auto maybe_result = softposit(imagePts, worldPts, param, initpose, caminfo);
+  //   }else{
+  //     auto maybe_result = softposit(imagePts, worldPts, param, initpose, boost::none);
+  //   }
+  // }
 }
