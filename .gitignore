@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 /.clang_complete
 /GPATH
 /GRTAGS
@@ -10,8 +9,6 @@ build
 *.pdf
 *.tex
 *.fdb_latexmk
-=======
->>>>>>> 9ee4789... Initial commit
 # Compiled Object files
 *.slo
 *.lo
@@ -40,3 +37,4 @@ build
 *.exe
 *.out
 *.app
+.vscode/c_cpp_properties.json

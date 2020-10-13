@@ -8,11 +8,9 @@ IF(CMAKE_VERSION VERSION_EQUAL "3.0.0" OR CMAKE_VERSION VERSION_GREATER "3.0.0")
 ENDIF()
 
 # use libc++ for osx
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -std=c++1y")
-
 if (APPLE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-endif
+endif()
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR})
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR})
@@ -40,23 +38,18 @@ if (APPLE)
   set(ALL_LIBS ${Accelerate_LIBRARIES})
 endif()
 
+# find Eigen3
+find_package(Eigen3 3.0.0 REQUIRED)
 
-# find boost
-find_package(Boost)
-link_directories(${Boost_LIBRARY_DIRS})
-
-# armadillo
-find_package(Armadillo REQUIRED)
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${PROJECT_BINARY_DIR}
-  ${Boost_INCLUDE_DIRS}
-  ${ARMADILLO_INCLUDE_DIRS}
+  "/usr/include/eigen3/"
   )
 
 add_definitions("-D_USE_MATH_DEFINES")
 
-set(ALL_LIBS ${ALL_LIBS} ${Boost_LIBRARIES} ${ARMADILLO_LIBRARIES})
+set(ALL_LIBS ${ALL_LIBS})
 
 
 add_subdirectory(src)

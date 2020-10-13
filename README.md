@@ -21,13 +21,10 @@ This repo. provides my cpp implementation.
 # How to Build
 
 ## Dependency
-1. Armadillo
+1. Eigen3
 
-It mainly depends on the Armadillo linear algebra library.
+It mainly depends on the Eigen3 linear algebra library.
 
-2. Boost (Format)
-
-There are also dependency on Boost, and only for outside logging code which can be easily removed.
 
 ## Build Steps
 The project is managed with CMake.
@@ -35,8 +32,9 @@ The project is managed with CMake.
 Suggested steps:
 
 ```
-git clone git@github.com:autosquid/softposit.git
+git clone https://github.com/wqhot/softposit-cpp
 cd softposit
+git checkout removearma
 mkdir build
 cd build
 cmake ..
