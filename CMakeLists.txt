@@ -2,15 +2,6 @@ cmake_minimum_required(VERSION 3.0)
 
 project(SoftPosit)
 
-set(CMAKE_BUILD_TYPE "DEBUG")
-if (CMAKE_BUILD_TYPE STREQUAL "RELEASE")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}-std=c++14 -O3 -pthread -fopenmp -s")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -pthread -fopenmp -s")
-else(CMAKE_BUILD_TYPE STREQUAL "RELEASE")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}-std=c++14 -O0 -g -Wall -pthread")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g -Wall -pthread")
-endif(CMAKE_BUILD_TYPE STREQUAL "RELEASE")
-
 IF(CMAKE_VERSION VERSION_EQUAL "3.0.0" OR CMAKE_VERSION VERSION_GREATER "3.0.0")
   CMAKE_POLICY(SET CMP0045 OLD)  # suppress set_target_properties empty target warnning
   CMAKE_POLICY(SET CMP0026 OLD)  # suppress set_target_properties read LOCATION warnning
@@ -47,24 +38,18 @@ if (APPLE)
   set(ALL_LIBS ${Accelerate_LIBRARIES})
 endif()
 
+# find Eigen3
+find_package(Eigen3 3.0.0 REQUIRED)
 
-# find boost
-find_package(Boost)
-link_directories(${Boost_LIBRARY_DIRS})
-
-# armadillo
-find_package(Armadillo REQUIRED)
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${PROJECT_BINARY_DIR}
-  ${Boost_INCLUDE_DIRS}
-  ${ARMADILLO_INCLUDE_DIRS}
   "/usr/include/eigen3/"
   )
 
 add_definitions("-D_USE_MATH_DEFINES")
 
-set(ALL_LIBS ${ALL_LIBS} ${Boost_LIBRARIES} ${ARMADILLO_LIBRARIES})
+set(ALL_LIBS ${ALL_LIBS})
 
 
 add_subdirectory(src)
